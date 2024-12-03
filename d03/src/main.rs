@@ -1,67 +1,54 @@
 use nom::{
+    branch::alt,
     bytes::complete::tag,
-    character::complete::{char, i32},
-    IResult,
+    character::complete::{anychar, i32},
+    multi::{many1, many_till},
+    sequence::{delimited, separated_pair},
+    IResult, Parser,
 };
+
+use nom::combinator::map;
 use std::time::Instant;
 
 fn mul(input: &str) -> IResult<&str, (i32, i32)> {
-    let (input, _) = tag("mul(")(input)?;
-    let (input, n1) = i32(input)?;
-    let (input, _) = char(',')(input)?;
-    let (input, n2) = i32(input)?;
-    let (input, _) = char(')')(input)?;
-    Ok((input, (n1, n2)))
+    delimited(tag("mul("), separated_pair(i32, tag(","), i32), tag(")"))(input)
 }
 
-fn p1(input: &str) -> i32 {
-    let mut sum = 0;
-    let mut rem = input;
-    while !rem.is_empty() {
-        if let Ok((new_rem, (a, b))) = mul(rem) {
-            sum += a * b;
-            rem = new_rem;
-        } else {
-            rem = &rem[1..];
-        }
-    }
-    sum
+fn p1(input: &str) -> IResult<&str, i32> {
+    let (input, v) = many1(many_till(anychar, mul).map(|(_, (a, b))| a * b))(input)?;
+    Ok((input, v.iter().sum()))
 }
-
-fn on(input: &str) -> IResult<&str, &str> {
-    tag("do()")(input)
+#[derive(Debug)]
+enum Op {
+    Mul(i32, i32),
+    Do,
+    Dont,
 }
-
-fn off(input: &str) -> IResult<&str, &str> {
-    tag("don't()")(input)
-}
-
-fn p2(input: &str) -> i32 {
-    let mut sum = 0;
-    let mut enabled = 1;
-    let mut rem = input;
-    while !rem.is_empty() {
-        if let Ok((input, _)) = on(rem) {
-            enabled = 1;
-            rem = input;
-        } else if let Ok((input, _)) = off(rem) {
-            enabled = 0;
-            rem = input;
-        } else if let Ok((input, (a, b))) = mul(rem) {
-            sum += a * b * enabled;
-            rem = input;
-        } else {
-            rem = &rem[1..];
-        }
-    }
-    sum
+fn p2(input: &str) -> IResult<&str, i32> {
+    let (input, ins) = many1(
+        many_till(
+            anychar,
+            alt((
+                map(mul, |(a, b)| Op::Mul(a, b)),
+                map(tag("do()"), |_| Op::Do),
+                map(tag("don't()"), |_| Op::Dont),
+            )),
+        )
+        .map(|(_, v)| v),
+    )(input)?;
+    let (_, acc): (i32, i32) = ins.iter().fold((1, 0), |(proc, acc), op| match op {
+        Op::Mul(a, b) => (proc, acc + a * b * proc),
+        Op::Do => (1, acc),
+        Op::Dont => (0, acc),
+    });
+    Ok((input, acc))
 }
 
 fn main() {
     let content = include_str!("input.txt");
     let time = Instant::now();
-    let p1 = p1(content);
-    let p2 = p2(content);
+    let (_, p1) = p1(content).unwrap();
+    let (_, p2) = p2(content).unwrap();
     println!("Time: {}µs", time.elapsed().as_micros());
     println!("Part 1: {}", p1);
     println!("Part 2: {}", p2);
