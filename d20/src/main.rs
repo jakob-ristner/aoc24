@@ -1,4 +1,4 @@
-use std::collections::{BinaryHeap, HashMap, HashSet, VecDeque};
+use std::collections::{HashMap, HashSet};
 
 type Map = Vec<Vec<char>>;
 type Pos = (i32, i32);
@@ -6,77 +6,49 @@ type Pos = (i32, i32);
 // Up, right, down, left
 const DIRS: [(i32, i32); 4] = [(0, -1), (1, 0), (0, 1), (-1, 0)];
 
-#[derive(Debug, Eq, PartialEq)]
-struct State {
-    path: Vec<Pos>,
-    cost: i32,
-}
-
-impl Ord for State {
-    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
-        other.cost.cmp(&self.cost)
-    }
-}
-
-impl PartialOrd for State {
-    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        Some(self.cmp(other))
-    }
-}
-
 fn main() {
     let content = include_str!("input.txt");
     let map = map(content);
     let start = start(&map);
-    let p1 = num_cheats(&map, &start, 2, 100);
-    let p2 = num_cheats(&map, &start, 20, 100);
+    let path = path(&map, &start);
+    let s_cost = path.len() as i32 - 1;
+    let p1 = num_cheats(s_cost, &path, 2, 100);
+    let p2 = num_cheats(s_cost, &path, 20, 100);
 
     println!("Part 1: {}", p1);
     println!("Part 2: {}", p2);
 }
 
-fn num_cheats(map: &Map, start: &Pos, ch_len: u32, min_saved: i32) -> usize {
-    let path = bfs(&map, &start).unwrap();
+fn num_cheats(s_cost: i32, path: &[Pos], ch_len: i32, min_saved: i32) -> usize {
+    let mut acc = 0;
     let p_len = path.len();
     let cost_to_end: HashMap<Pos, i32> = path
         .iter()
         .enumerate()
         .map(|(i, &pos)| (pos, (p_len - i - 1) as i32))
         .collect();
-    let s_cost = cost_to_end[&start];
-    let mut cheats: HashMap<(Pos, Pos), i32> = HashMap::new();
     for (cost_to_here, &pos) in path.iter().enumerate() {
-        for (opp, offset) in reachable_in_n_steps(&map, &pos, ch_len) {
-            let cost_from_opp = cost_to_end[&opp];
-            let cost = cost_to_here as i32 + offset + cost_from_opp;
-            let saved = s_cost - cost;
-            if saved < min_saved {
-                continue;
+        for (opp, offset) in reachable_in_n_steps(&pos, ch_len) {
+            if let Some(cost_from_opp) = cost_to_end.get(&opp) {
+                let cost = cost_to_here as i32 + offset + cost_from_opp;
+                let saved = s_cost - cost;
+                if saved >= min_saved {
+                    acc += 1;
+                }
             }
-            cheats.insert((pos, opp), cost);
         }
     }
-    cheats.len()
+    acc
 }
 
-fn reachable_in_n_steps(map: &Map, from: &Pos, n: u32) -> Vec<(Pos, i32)> {
+fn reachable_in_n_steps(from: &Pos, n: i32) -> Vec<(Pos, i32)> {
     let mut out = Vec::new();
-    for y in 0..map.len() {
-        for x in 0..map[0].len() {
-            let x = x as i32;
-            let y = y as i32;
-            if (x, y) == *from {
-                continue;
-            }
-            let dx = x.abs_diff(from.0);
-            let dy = y.abs_diff(from.1);
-            if dx + dy > n {
-                continue;
-            }
-            if map[y as usize][x as usize] == '#' {
-                continue;
-            }
-            out.push(((x, y), (dx + dy) as i32));
+    for dy in -n..=n {
+        let left = n - dy.abs();
+        for dx in -left..=left {
+            let pos = (from.0 + dx, from.1 + dy);
+            let d = dx.abs() + dy.abs();
+            out.push((pos, d));
         }
     }
     out
@@ -96,40 +68,21 @@ fn start(map: &Map) -> Pos {
     panic!("No start position found");
 }
 
-fn bfs(map: &Map, start: &Pos) -> Option<Vec<Pos>> {
-    let w = map[0].len();
-    let h = map.len();
-    let mut heap: BinaryHeap<State> = BinaryHeap::new();
-    let mut visited: HashMap<Pos, i32> = HashMap::new();
-    assert_ne!(map[start.1 as usize][start.0 as usize], '#');
-    heap.push(State {
-        path: vec![*start],
-        cost: 0,
-    });
-
-    while let Some(State { path, cost }) = heap.pop() {
-        let pos = path.last().unwrap();
-        if visited.contains_key(pos) && visited[pos] < cost {
-            continue;
-        }
-        visited.insert(*pos, cost);
-        let (x, y) = *pos;
-        if map[y as usize][x as usize] == 'E' {
-            return Some(path);
-        }
-
-        for new_pos in adj_bounded(pos, w, h) {
-            if map[new_pos.1 as usize][new_pos.0 as usize] != '#' {
-                let mut new_path = path.clone();
-                new_path.push(new_pos);
-                heap.push(State {
-                    path: new_path,
-                    cost: cost + 1,
-                });
-            }
-        }
+fn path(map: &Map, start: &Pos) -> Vec<Pos> {
+    let mut pos = *start;
+    let mut path = vec![pos];
+    let mut visited = HashSet::new();
+    while map[pos.1 as usize][pos.0 as usize] != 'E' {
+        visited.insert(pos);
+        let adj = adj_bounded(&pos, map[0].len(), map.len());
+        let next = adj
+            .iter()
+            .find(|&pos| !visited.contains(pos) && map[pos.1 as usize][pos.0 as usize] != '#')
+            .unwrap();
+        path.push(*next);
+        pos = *next;
     }
-    None
+    path
 }
 
 fn adj_bounded(pos: &Pos, w: usize, h: usize) -> Vec<Pos> {
