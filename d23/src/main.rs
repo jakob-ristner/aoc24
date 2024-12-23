@@ -6,10 +6,10 @@ use itertools::Itertools;
 type Graph = FxHashMap<String, FxHashSet<String>>;
 
 fn main() {
-    let content = include_str!("test.txt");
+    let content = include_str!("input.txt");
     let graph = parse(content);
 
-    let max_cliques = find_max_clique(&graph);
+    let max_cliques = get_max_cliques(&graph);
     let p1 = part1(&max_cliques);
     let p2 = part2(&max_cliques);
 
@@ -59,9 +59,9 @@ fn parse(input: &str) -> Graph {
     graph
 }
 
-fn find_max_clique(graph: &Graph) -> Vec<FxHashSet<String>> {
+fn get_max_cliques(graph: &Graph) -> Vec<FxHashSet<String>> {
     let vertices: FxHashSet<String> = graph.keys().cloned().collect();
-    let mut max_cliques = vec![FxHashSet::default()];
+    let mut max_cliques = vec![];
     bron_kerbosch(
         &FxHashSet::default(),
         &vertices,
